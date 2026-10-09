@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Upscale · YouTube Downloader</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css?v=5" />
+</head>
+<body>
+  <main class="shell">
+    <a class="brand" href="https://aiupscalellc.netlify.app/" target="_blank" rel="noopener noreferrer" aria-label="AI Upscale home">
+      <img src="/static/logo.jpg" alt="AI Upscale" />
+    </a>
+
+    <header class="hero">
+      <p class="kicker">YouTube downloader</p>
+      <h1>Save videos as MP4</h1>
+      <p class="lede">Choose Video or Playlist, paste the YouTube link, then save MP4 files with audio.</p>
+    </header>
+
+    <section class="card">
+      <form id="lookup-form">
+        <div class="mode-switch" role="tablist" aria-label="Download type">
+          <button type="button" id="mode-video" class="mode-btn is-active" aria-pressed="true">Video</button>
+          <button type="button" id="mode-playlist" class="mode-btn" aria-pressed="false">Playlist</button>
+        </div>
+        <label for="url" id="url-label">Video URL</label>
+        <div class="row">
+          <input id="url" name="url" type="url" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" required />
+          <button type="submit" id="lookup-btn">Look up</button>
+        </div>
+        <p id="mode-hint" class="hint">Paste one video link. To grab a whole list, switch to Playlist.</p>
+      </form>
+    </section>
+
+    <section id="preview" class="card preview" hidden>
+      <div class="preview-layout">
+        <img id="thumb" alt="Video thumbnail" />
+        <div class="meta">
+          <p id="kind" class="kind"></p>
+          <h2 id="title"></h2>
+          <p id="channel" class="muted"></p>
+          <p id="details" class="muted"></p>
+        </div>
+      </div>
+
+      <div id="playlist-wrap" class="playlist-wrap" hidden>
+        <div class="playlist-toolbar">
+          <label class="select-all">
+            <input type="checkbox" id="select-all" checked />
+            Select all
+          </label>
+          <span id="selected-count" class="muted"></span>
+        </div>
+        <ul id="playlist-videos"></ul>
+      </div>
+
+      <div class="controls">
+        <fieldset>
+          <legend>Quality</legend>
+          <div class="chips" id="quality">
+            <label class="chip"><input type="radio" name="quality" value="best" checked /> Best</label>
+            <label class="chip"><input type="radio" name="quality" value="1080p" /> 1080p</label>
+            <label class="chip"><input type="radio" name="quality" value="720p" /> 720p</label>
+            <label class="chip"><input type="radio" name="quality" value="480p" /> 480p</label>
+            <label class="chip"><input type="radio" name="quality" value="360p" /> 360p</label>
+          </div>
+        </fieldset>
+        <div class="transport">
+          <button type="button" id="download-btn" class="primary">Download MP4</button>
+          <button type="button" id="pause-btn" disabled>Pause</button>
+          <button type="button" id="stop-btn" class="danger" disabled>Stop</button>
+        </div>
+      </div>
+
+      <div id="progress-wrap" class="progress-wrap" hidden>
+        <div class="progress-bar"><span id="progress-fill"></span></div>
+        <p id="progress-text" class="muted"></p>
+      </div>
+    </section>
+
+    <section class="card save-card">
+      <label for="save-dir">Save folder</label>
+      <div class="row">
+        <input id="save-dir" type="text" spellcheck="false" placeholder="Choose a folder…" />
+        <button type="button" id="browse-folder">Browse</button>
+        <button type="button" id="open-folder" class="ghost">Open</button>
+      </div>
+      <p id="save-status" class="hint">Downloads, including playlist folders, go here.</p>
+    </section>
+
+    <section class="card error-card">
+      <p class="error-label">Error readout</p>
+      <pre id="error-log">No errors.</pre>
+    </section>
+  </main>
+  <script src="/static/app.js?v=4"></script>
+</body>
+</html>

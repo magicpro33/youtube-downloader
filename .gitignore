@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.downloads/
+downloads/
+settings.json
+*.mp4
+*.part
+*.ytdl
+.DS_Store
