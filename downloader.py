@@ -123,10 +123,61 @@ def set_save_dir(path: str | Path) -> Path:
     return candidate
 
 
-def native_pick_folder(initial: Path | None = None) -> Path | None:
-    start = str(initial or get_save_dir())
+def _is_windows() -> bool:
+    if os.name == "nt" or sys.platform.startswith("win"):
+        return True
+    if sys.platform in {"cygwin", "msys"}:
+        return True
+    if os.environ.get("WINDIR") or os.environ.get("SYSTEMROOT"):
+        return True
+    return which("explorer.exe") is not None
+
+
+def _pick_folder_powershell(initial: str) -> Path | None:
+    ps = (
+        "Add-Type -AssemblyName System.Windows.Forms; "
+        "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog; "
+        "$dialog.Description = 'Choose save folder'; "
+        "$dialog.ShowNewFolderButton = $true; "
+        "if ($env:PICK_START) { $dialog.SelectedPath = $env:PICK_START }; "
+        "$form = New-Object System.Windows.Forms.Form; "
+        "$form.TopMost = $true; "
+        "$form.StartPosition = 'CenterScreen'; "
+        "$form.Width = 1; $form.Height = 1; "
+        "$form.Show(); $form.Activate(); "
+        "if ($dialog.ShowDialog($form) -eq [System.Windows.Forms.DialogResult]::OK) { "
+        "[Console]::Out.Write($dialog.SelectedPath) "
+        "}; "
+        "$form.Close()"
+    )
+    env = os.environ.copy()
+    env["PICK_START"] = initial
+    powershell = which("powershell") or which("powershell.exe")
+    if not powershell:
+        windir = Path(os.environ.get("WINDIR", r"C:\Windows"))
+        candidate = windir / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+        powershell = str(candidate) if candidate.exists() else None
+    if not powershell:
+        return None
+    result = subprocess.run(
+        [powershell, "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-Command", ps],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        env=env,
+    )
+    text = (result.stdout or "").strip().strip('"')
+    if text:
+        return Path(text)
+    if result.returncode not in (0, None) and (result.stderr or "").strip():
+        raise RuntimeError(result.stderr.strip())
+    return None
+
+
+def _pick_folder_tk(initial: str) -> Path | None:
     script = (
         "import sys\n"
+        "from pathlib import Path\n"
         "import tkinter as tk\n"
         "from tkinter import filedialog\n"
         "root = tk.Tk()\n"
@@ -134,16 +185,16 @@ def native_pick_folder(initial: Path | None = None) -> Path | None:
         "root.update_idletasks()\n"
         "try:\n"
         "    root.attributes('-topmost', True)\n"
+        "    root.lift()\n"
+        "    root.focus_force()\n"
         "except Exception:\n"
         "    pass\n"
-        "chosen = filedialog.askdirectory(initialdir=sys.argv[1], title='Choose save folder')\n"
+        "chosen = filedialog.askdirectory(initialdir=sys.argv[1], title='Choose save folder', parent=root)\n"
         "print(chosen or '', end='')\n"
+        "root.destroy()\n"
     )
-    exe = Path(sys.executable)
-    pythonw = exe.with_name("pythonw.exe")
-    runner = str(pythonw) if pythonw.exists() else str(exe)
     result = subprocess.run(
-        [runner, "-c", script, start],
+        [sys.executable, "-c", script, initial],
         capture_output=True,
         text=True,
         timeout=300,
@@ -152,15 +203,48 @@ def native_pick_folder(initial: Path | None = None) -> Path | None:
     return Path(text) if text else None
 
 
+def native_pick_folder(initial: Path | None = None) -> Path | None:
+    start = str(initial or get_save_dir())
+    errors: list[str] = []
+    if _is_windows():
+        try:
+            chosen = _pick_folder_powershell(start)
+            if chosen:
+                return chosen
+        except Exception as exc:
+            errors.append(str(exc))
+    try:
+        chosen = _pick_folder_tk(start)
+        if chosen:
+            return chosen
+    except Exception as exc:
+        errors.append(str(exc))
+    if errors:
+        raise RuntimeError("Could not open the folder picker. " + errors[-1])
+    return None
+
+
 def open_save_folder() -> str:
     folder = str(get_save_dir())
-    if sys.platform.startswith("win"):
-        os.startfile(folder)  # type: ignore[attr-defined]
-    elif sys.platform == "darwin":
+    Path(folder).mkdir(parents=True, exist_ok=True)
+    if _is_windows():
+        explorer = Path(os.environ.get("WINDIR", r"C:\Windows")) / "explorer.exe"
+        if explorer.exists():
+            subprocess.Popen([str(explorer), folder], close_fds=True)
+            return folder
+        if hasattr(os, "startfile"):
+            os.startfile(folder)  # type: ignore[attr-defined]
+            return folder
+        subprocess.Popen(["cmd", "/c", "start", "", folder], shell=False)
+        return folder
+    if sys.platform == "darwin":
         subprocess.Popen(["open", folder])
-    else:
-        subprocess.Popen(["xdg-open", folder])
-    return folder
+        return folder
+    opener = which("xdg-open") or which("gio")
+    if opener:
+        subprocess.Popen([opener, folder])
+        return folder
+    raise RuntimeError(f"Could not open folder: {folder}")
 
 
 def ffmpeg_path() -> str | None:
