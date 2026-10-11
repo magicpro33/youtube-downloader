@@ -36,7 +36,7 @@ st.set_page_config(
 DISCLAIMER = f"""
 **LEGAL DISCLAIMER, WAIVER, AND RELEASE OF LIABILITY**
 
-This YouTube downloader is provided by **{COMPANY}** (“Company,” “we,” “us”) solely as a convenience tool. By checking the box below and clicking **I Accept**, you (“User”) agree to all of the following. If you do not agree, do not use this software.
+This YouTube downloader is provided by **{COMPANY}** (“Company,” “we,” “us”) solely as a convenience tool. By clicking **I Accept**, you (“User”) agree to all of the following. If you do not agree, do not use this software.
 
 **1. Not affiliated with YouTube.** This tool is not endorsed, sponsored, or affiliated with YouTube, Google LLC, or any of their affiliates. YouTube’s name and trademarks belong to their respective owners.
 
@@ -140,20 +140,52 @@ def show_brand() -> None:
     st.markdown('<p class="kicker">YouTube downloader</p>', unsafe_allow_html=True)
 
 
+def _browse_save_folder() -> None:
+    chosen = native_pick_folder()
+    if not chosen:
+        return
+    try:
+        path = set_save_dir(chosen)
+        st.session_state.save_dir_input = str(path)
+        st.session_state.folder_error = None
+    except Exception as exc:
+        st.session_state.folder_error = str(exc)
+
+
+def _apply_save_folder() -> None:
+    path_value = (st.session_state.get("save_dir_input") or "").strip()
+    if not path_value:
+        return
+    try:
+        path = set_save_dir(path_value)
+        st.session_state.save_dir_input = str(path)
+        st.session_state.folder_error = None
+    except Exception as exc:
+        st.session_state.folder_error = str(exc)
+
+
+def _open_save_folder() -> None:
+    try:
+        path_value = (st.session_state.get("save_dir_input") or "").strip()
+        if path_value:
+            path = set_save_dir(path_value)
+            st.session_state.save_dir_input = str(path)
+        open_save_folder()
+        st.session_state.folder_error = None
+    except Exception as exc:
+        st.session_state.folder_error = str(exc)
+
+
 def show_disclaimer_gate() -> None:
     show_brand()
     st.title("Before you continue")
     st.caption("You must read and accept this disclaimer. The downloader will not load until you do.")
     with st.expander("Legal disclaimer, waiver, and release of liability", expanded=True):
         st.markdown(DISCLAIMER)
-    agreed = st.checkbox(
-        "I have read this disclaimer in full. I understand it, I accept it, and I release AI Upscale LLC "
-        "and the operator of this app from all liability related to my use of this software."
-    )
-    if st.button("I Accept", type="primary", disabled=not agreed, use_container_width=True):
+    if st.button("I Accept", type="primary", use_container_width=True):
         st.session_state.disclaimer_accepted = True
         st.rerun()
-    st.caption("If you do not accept, close this window. No downloads are possible without acceptance.")
+    st.caption("Clicking I Accept means you agree to the disclaimer. If you do not accept, close this window.")
 
 
 def show_downloader() -> None:
@@ -162,6 +194,10 @@ def show_downloader() -> None:
     st.caption("Choose Video or Playlist, paste the YouTube link, then save MP4 files with audio.")
 
     errors: list[str] = list(st.session_state.get("errors") or [])
+    folder_error = st.session_state.pop("folder_error", None)
+    if folder_error:
+        errors.append(folder_error)
+        st.session_state.errors = errors
 
     mode = st.radio("Mode", ["Video", "Playlist"], horizontal=True, label_visibility="collapsed")
     playlist_mode = mode == "Playlist"
@@ -303,29 +339,18 @@ def show_downloader() -> None:
 
     st.markdown("---")
     st.subheader("Save folder")
-    if "save_dir_input" not in st.session_state:
-        st.session_state.save_dir_input = str(get_save_dir())
     folder_col, browse_col, open_col = st.columns([3, 1, 1])
     with folder_col:
-        st.text_input("Save folder path", key="save_dir_input", label_visibility="collapsed")
+        st.text_input(
+            "Save folder path",
+            key="save_dir_input",
+            label_visibility="collapsed",
+            on_change=_apply_save_folder,
+        )
     with browse_col:
-        if st.button("Browse", use_container_width=True):
-            chosen = native_pick_folder()
-            if chosen:
-                set_save_dir(chosen)
-                st.session_state.save_dir_input = str(chosen)
-                st.rerun()
+        st.button("Browse", use_container_width=True, on_click=_browse_save_folder)
     with open_col:
-        if st.button("Open", use_container_width=True):
-            try:
-                path_value = (st.session_state.save_dir_input or "").strip()
-                if path_value:
-                    set_save_dir(path_value)
-                    st.session_state.save_dir_input = str(get_save_dir())
-                open_save_folder()
-            except Exception as exc:
-                errors.append(str(exc))
-                st.session_state.errors = errors
+        st.button("Open", use_container_width=True, on_click=_open_save_folder)
 
     st.caption("Downloads, including playlist folders, go here.")
 
@@ -341,8 +366,8 @@ if not st.session_state.get("disclaimer_accepted"):
     show_disclaimer_gate()
     st.stop()
 
-if "save_dir" not in st.session_state:
-    st.session_state.save_dir = str(get_save_dir())
+if "save_dir_input" not in st.session_state:
+    st.session_state.save_dir_input = str(get_save_dir())
 if "errors" not in st.session_state:
     st.session_state.errors = []
 

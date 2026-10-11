@@ -139,15 +139,15 @@ def native_pick_folder(initial: Path | None = None) -> Path | None:
         "chosen = filedialog.askdirectory(initialdir=sys.argv[1], title='Choose save folder')\n"
         "print(chosen or '', end='')\n"
     )
-    kwargs: dict[str, Any] = {
-        "args": [sys.executable, "-c", script, start],
-        "capture_output": True,
-        "text": True,
-        "timeout": 300,
-    }
-    if sys.platform.startswith("win"):
-        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-    result = subprocess.run(**kwargs)
+    exe = Path(sys.executable)
+    pythonw = exe.with_name("pythonw.exe")
+    runner = str(pythonw) if pythonw.exists() else str(exe)
+    result = subprocess.run(
+        [runner, "-c", script, start],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
     text = (result.stdout or "").strip()
     return Path(text) if text else None
 
