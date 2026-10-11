@@ -119,6 +119,42 @@ def get_save_dir() -> Path:
     return folder
 
 
+def deno_path() -> str | None:
+    found = which("deno") or which("deno.exe")
+    if found:
+        return str(Path(found).resolve())
+    local = Path(os.environ.get("LOCALAPPDATA", ""))
+    candidates = [
+        Path.home() / ".deno" / "bin" / "deno.exe",
+        local / "deno" / "deno.exe",
+    ]
+    winget = local / "Microsoft" / "WinGet" / "Packages"
+    if winget.is_dir():
+        candidates.extend(folder / "deno.exe" for folder in winget.glob("DenoLand.Deno*"))
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate.resolve())
+    return None
+
+
+def friendly_download_error(exc: BaseException) -> str:
+    text = str(exc).strip() or exc.__class__.__name__
+    compact = " ".join(text.split())
+    low = compact.lower()
+    if "403" in compact or "forbidden" in low:
+        return (
+            "YouTube blocked the video file (HTTP 403 Forbidden). "
+            "The app found the video, but YouTube refused the stream, so nothing was saved. "
+            "This is YouTube blocking the download, not a problem with your Downloads folder."
+        )
+    if "404" in compact:
+        return (
+            "YouTube said the video file was not found (HTTP 404). "
+            "The video may be private, deleted, or the download link expired, so nothing was saved."
+        )
+    return compact
+
+
 def _is_windows() -> bool:
     if os.name == "nt" or sys.platform.startswith("win"):
         return True
@@ -289,10 +325,17 @@ def base_ydl_opts(extra: dict[str, Any] | None = None) -> dict[str, Any]:
         "overwrites": False,
         "continuedl": True,
         "noplaylist": True,
+        "retries": 8,
+        "fragment_retries": 8,
+        "extractor_retries": 3,
+        "retry_sleep_functions": {"http": lambda n: min(2 ** n, 8)},
     }
     loc = ffmpeg_path()
     if loc:
         opts["ffmpeg_location"] = loc
+    runtime = deno_path()
+    if runtime:
+        opts["js_runtimes"] = {"deno": {"path": runtime}}
     if extra:
         opts.update(extra)
     return opts
@@ -363,9 +406,9 @@ def lookup_info(url: str, playlist: bool = False) -> dict[str, Any]:
         ) as ydl:
             info = ydl.extract_info(url, download=False)
     except yt_dlp.utils.DownloadError as exc:
-        raise RuntimeError(str(exc)) from exc
+        raise RuntimeError(friendly_download_error(exc)) from exc
     except Exception as exc:
-        raise RuntimeError(f"Could not read that URL: {exc}") from exc
+        raise RuntimeError(f"Could not read that URL: {friendly_download_error(exc)}") from exc
 
     if not info:
         raise RuntimeError("No video found at that URL.")
@@ -482,7 +525,7 @@ def download_one(
             raise JobStopped() from exc
         if handle.pause.is_set() or caused_by(exc, JobPaused):
             raise JobPaused() from exc
-        raise
+        raise RuntimeError(friendly_download_error(exc)) from exc
 
 
 def mark_paused(job_id: str, handle: JobHandle, remaining: list[str], index: int, total: int) -> None:
@@ -603,13 +646,15 @@ def run_download(job_id: str) -> None:
         handle.single_url = url
         handle.outtmpl = str(get_save_dir() / "%(title)s.%(ext)s")
         path = download_one(job_id, url, quality, handle.outtmpl)
+        if not path:
+            raise RuntimeError("YouTube finished talking, but no MP4 was written to Downloads.")
         update_job(
             job_id,
             status="done",
             percent=100,
-            message="Saved as MP4 with audio.",
-            filename=path.name if path else None,
-            path=str(path) if path else None,
+            message=f"Saved to {path}",
+            filename=path.name,
+            path=str(path),
             current=1,
             total=1,
             errors=list(handle.errors),
@@ -619,12 +664,13 @@ def run_download(job_id: str) -> None:
     except JobStopped:
         mark_stopped(job_id, handle)
     except Exception as exc:
-        append_error(job_id, str(exc))
+        message = friendly_download_error(exc)
+        append_error(job_id, message)
         update_job(
             job_id,
             status="error",
             message="Download failed.",
-            error=str(exc),
+            error=message,
             errors=list(handle.errors),
         )
 

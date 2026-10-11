@@ -153,9 +153,10 @@ def show_downloader() -> None:
     show_brand()
     st.title("Save videos as MP4")
     st.caption(
-        f"Choose Video or Playlist, paste the YouTube link, then save MP4 files with audio "
-        f"to your Downloads folder ({get_save_dir()})."
+        "Choose Video or Playlist, paste the YouTube link, then save MP4 files with audio. "
+        "Files are written on this PC — they will not appear in the browser download bar."
     )
+    st.info(f"Saving to `{get_save_dir()}`")
 
     errors: list[str] = list(st.session_state.get("errors") or [])
 
