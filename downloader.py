@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import re
 import subprocess
@@ -14,14 +13,41 @@ from typing import Any
 import yt_dlp
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_DOWNLOADS = Path.home() / "Videos" / "YouTube Downloads"
-SETTINGS_FILE = ROOT / "settings.json"
+
+
+def default_download_dir() -> Path:
+    """The usual browser Downloads folder (Windows Known Folder, else ~/Downloads)."""
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            class GUID(ctypes.Structure):
+                _fields_ = [
+                    ("Data1", ctypes.c_ulong),
+                    ("Data2", ctypes.c_ushort),
+                    ("Data3", ctypes.c_ushort),
+                    ("Data4", ctypes.c_ubyte * 8),
+                ]
+
+            folder_id = GUID(
+                0x374DE290,
+                0x123F,
+                0x4565,
+                (ctypes.c_ubyte * 8)(0x91, 0x64, 0x39, 0xC4, 0x92, 0x5E, 0x46, 0x7B),
+            )
+            path_ptr = ctypes.c_wchar_p()
+            result = ctypes.windll.shell32.SHGetKnownFolderPath(
+                ctypes.byref(folder_id), 0, None, ctypes.byref(path_ptr)
+            )
+            if result == 0 and path_ptr.value:
+                return Path(path_ptr.value)
+        except Exception:
+            pass
+    return Path.home() / "Downloads"
 
 jobs: dict[str, dict[str, Any]] = {}
 jobs_lock = threading.Lock()
 handles: dict[str, "JobHandle"] = {}
-_save_lock = threading.Lock()
-_save_dir: Path | None = None
 _ffmpeg_path: str | None = None
 TERMINAL = {"done", "error", "stopped", "paused"}
 
@@ -87,40 +113,10 @@ def append_error(job_id: str, message: str) -> None:
         update_job(job_id, errors=list(handle.errors), error=message)
 
 
-def _load_save_dir() -> Path:
-    try:
-        if SETTINGS_FILE.exists():
-            data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-            candidate = Path(str(data.get("save_dir", ""))).expanduser()
-            if candidate.is_absolute():
-                return candidate
-    except Exception:
-        pass
-    return DEFAULT_DOWNLOADS
-
-
 def get_save_dir() -> Path:
-    global _save_dir
-    with _save_lock:
-        if _save_dir is None:
-            _save_dir = _load_save_dir()
-        _save_dir.mkdir(parents=True, exist_ok=True)
-        return _save_dir
-
-
-def set_save_dir(path: str | Path) -> Path:
-    global _save_dir
-    candidate = Path(path).expanduser()
-    if not candidate.is_absolute():
-        raise ValueError("Choose a full folder path.")
-    candidate.mkdir(parents=True, exist_ok=True)
-    SETTINGS_FILE.write_text(
-        json.dumps({"save_dir": str(candidate)}, indent=2),
-        encoding="utf-8",
-    )
-    with _save_lock:
-        _save_dir = candidate
-    return candidate
+    folder = default_download_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
 
 
 def _is_windows() -> bool:

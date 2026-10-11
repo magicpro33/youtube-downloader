@@ -21,7 +21,7 @@ Then open [http://127.0.0.1:8501](http://127.0.0.1:8501).
 
 1. Accept the disclaimer
 2. Paste a YouTube video or playlist URL
-3. Pick a quality and save folder
-4. Download a merged MP4 (video + audio)
+3. Pick a quality
+4. Download a merged MP4 (video + audio) to your browser Downloads folder
 
 Pause and Stop are available while a download is running.

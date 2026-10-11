@@ -12,11 +12,8 @@ from downloader import (
     get_job,
     get_save_dir,
     lookup_info,
-    native_pick_folder,
-    open_save_folder,
     pause_job,
     resume_job,
-    set_save_dir,
     start_download,
     stop_job,
 )
@@ -140,42 +137,6 @@ def show_brand() -> None:
     st.markdown('<p class="kicker">YouTube downloader</p>', unsafe_allow_html=True)
 
 
-def _browse_save_folder() -> None:
-    chosen = native_pick_folder()
-    if not chosen:
-        return
-    try:
-        path = set_save_dir(chosen)
-        st.session_state.save_dir_input = str(path)
-        st.session_state.folder_error = None
-    except Exception as exc:
-        st.session_state.folder_error = str(exc)
-
-
-def _apply_save_folder() -> None:
-    path_value = (st.session_state.get("save_dir_input") or "").strip()
-    if not path_value:
-        return
-    try:
-        path = set_save_dir(path_value)
-        st.session_state.save_dir_input = str(path)
-        st.session_state.folder_error = None
-    except Exception as exc:
-        st.session_state.folder_error = str(exc)
-
-
-def _open_save_folder() -> None:
-    try:
-        path_value = (st.session_state.get("save_dir_input") or "").strip()
-        if path_value:
-            path = set_save_dir(path_value)
-            st.session_state.save_dir_input = str(path)
-        open_save_folder()
-        st.session_state.folder_error = None
-    except Exception as exc:
-        st.session_state.folder_error = str(exc)
-
-
 def show_disclaimer_gate() -> None:
     show_brand()
     st.title("Before you continue")
@@ -191,13 +152,12 @@ def show_disclaimer_gate() -> None:
 def show_downloader() -> None:
     show_brand()
     st.title("Save videos as MP4")
-    st.caption("Choose Video or Playlist, paste the YouTube link, then save MP4 files with audio.")
+    st.caption(
+        f"Choose Video or Playlist, paste the YouTube link, then save MP4 files with audio "
+        f"to your Downloads folder ({get_save_dir()})."
+    )
 
     errors: list[str] = list(st.session_state.get("errors") or [])
-    folder_error = st.session_state.pop("folder_error", None)
-    if folder_error:
-        errors.append(folder_error)
-        st.session_state.errors = errors
 
     mode = st.radio("Mode", ["Video", "Playlist"], horizontal=True, label_visibility="collapsed")
     playlist_mode = mode == "Playlist"
@@ -338,23 +298,6 @@ def show_downloader() -> None:
                 st.rerun()
 
     st.markdown("---")
-    st.subheader("Save folder")
-    folder_col, browse_col, open_col = st.columns([3, 1, 1])
-    with folder_col:
-        st.text_input(
-            "Save folder path",
-            key="save_dir_input",
-            label_visibility="collapsed",
-            on_change=_apply_save_folder,
-        )
-    with browse_col:
-        st.button("Browse", use_container_width=True, on_click=_browse_save_folder)
-    with open_col:
-        st.button("Open", use_container_width=True, on_click=_open_save_folder)
-
-    st.caption("Downloads, including playlist folders, go here.")
-
-    st.markdown("---")
     st.markdown('<p class="kicker">Error readout</p>', unsafe_allow_html=True)
     text = html.escape("\n".join(errors)) if errors else "No errors."
     css_class = "error-readout" if errors else "error-readout empty"
@@ -366,8 +309,6 @@ if not st.session_state.get("disclaimer_accepted"):
     show_disclaimer_gate()
     st.stop()
 
-if "save_dir_input" not in st.session_state:
-    st.session_state.save_dir_input = str(get_save_dir())
 if "errors" not in st.session_state:
     st.session_state.errors = []
 
